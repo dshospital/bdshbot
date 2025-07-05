@@ -8,9 +8,8 @@ from email.mime.text import MIMEText
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 
-# Database connector
-import mysql.connector
-from mysql.connector import Error
+# Database library that works with both PostgreSQL (Render) and MySQL (Local)
+from sqlalchemy import create_engine, text
 
 # For Google Sheets and other HTTP requests
 import requests 
@@ -23,63 +22,49 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 # --- PART 2: FLASK APP AND CONFIGURATION ---
-app = Flask(__name__, template_folder='templates') # Tell Flask where to find index.html
+app = Flask(__name__, template_folder='templates')
 CORS(app)
 
 # --- Configuration will be read from Environment Variables on Render ---
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 RECIPIENT_EMAIL = 'marketing@daralshefa.com' 
 GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxNDYje0Ce2jTN_wFiZG_QsCDp1lAhsW_RHBJBK4EYOUtNW-DSHQJgaip8s32NyNcZk/exec'
-# Note: DB_CONFIG and other secrets will be set in Render's environment
-# ---------------------------------
+
+# --- ✨ Smart Database Connection ---
+# Render provides a DATABASE_URL. For local testing, we fall back to MySQL.
+DATABASE_URL = os.environ.get('DATABASE_URL')
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+else:
+    # Local MySQL connection string
+    DATABASE_URL = "mysql+mysqlconnector://root:@localhost/test_db"
+
+engine = create_engine(DATABASE_URL)
 
 # --- PART 3: HELPER FUNCTIONS ---
 
-def create_connection():
-    """Creates a secure connection to the database."""
-    try:
-        # For Render, you would use environment variables for DB credentials as well
-        # For now, we keep it simple for local testing if needed
-        return mysql.connector.connect(
-            host=os.environ.get('DB_HOST', 'localhost'),
-            user=os.environ.get('DB_USER', 'root'),
-            password=os.environ.get('DB_PASSWORD', ''),
-            database=os.environ.get('DB_NAME', 'test_db')
-        )
-    except Error as e:
-        print(f"Error connecting to MySQL: {e}")
-        return None
-
 def send_email_notification(name, phone, clinic):
-    """
-    ✨ Sends an email using Gmail API, reading secrets from environment variables. ✨
-    """
+    """Sends an email using Gmail API, reading secrets from environment variables."""
     creds = None
     
-    # Read token and credentials from environment variables set in Render
-    token_data = os.environ.get('GOOGLE_TOKEN_JSON')
-    creds_data = os.environ.get('GOOGLE_CREDENTIALS_JSON')
+    token_data_str = os.environ.get('GOOGLE_TOKEN_JSON')
+    creds_data_str = os.environ.get('GOOGLE_CREDENTIALS_JSON')
 
-    if not creds_data:
-        print("FATAL ERROR: GOOGLE_CREDENTIALS_JSON environment variable not set.")
+    if not creds_data_str:
+        print("FATAL ERROR: GOOGLE_CREDENTIALS_JSON environment variable not set on Render.")
         return
 
-    if token_data:
-        creds = Credentials.from_authorized_user_info(json.loads(token_data), SCOPES)
+    creds_data = json.loads(creds_data_str)
+
+    if token_data_str:
+        token_data = json.loads(token_data_str)
+        creds = Credentials.from_authorized_user_info(token_data, SCOPES)
     
-    # This part is for the very first run on a local machine to get the token.
-    # On Render, the token should already be set as an environment variable.
     if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_config(json.loads(creds_data), SCOPES)
-            # Note: run_local_server will not work on Render. The token must be generated locally first.
-            creds = flow.run_local_server(port=0)
-        # Save the new token to a local file (for local testing)
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-            print("New token.json created. Copy its content to GOOGLE_TOKEN_JSON on Render.")
+        print("Credentials not valid or expired. This needs manual intervention for the first run.")
+        # On a server, you can't do the interactive flow. 
+        # The token must be generated locally and its JSON content pasted into the environment variable.
+        return
 
     try:
         service = build('gmail', 'v1', credentials=creds)
@@ -102,7 +87,6 @@ def send_email_notification(name, phone, clinic):
         print(F'Email sent successfully! Message Id: {send_message["id"]}')
     except Exception as e:
         print(f"An error occurred while sending email: {e}")
-
 
 def send_to_google_sheet(name, phone, clinic):
     """Sends data to the Google Sheet."""
@@ -138,17 +122,17 @@ def format_chat_tree(records):
     return chat_tree
 
 def get_user_id(conn, platform_id):
-    """Gets a user's ID or creates a new user."""
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM users WHERE platform_user_id = %s", (platform_id,))
-    user = cursor.fetchone()
-    if user:
-        user_id = user[0]
+    """Gets a user's ID or creates a new user using SQLAlchemy."""
+    user_query = text("SELECT user_id FROM users WHERE platform_user_id = :pid")
+    result = conn.execute(user_query, {"pid": platform_id}).fetchone()
+    
+    if result:
+        return result[0]
     else:
-        cursor.execute("INSERT INTO users (platform_user_id) VALUES (%s)", (platform_id,))
-        user_id = cursor.lastrowid
-    conn.commit()
-    return user_id
+        insert_query = text("INSERT INTO users (platform_user_id) VALUES (:pid) RETURNING user_id")
+        result = conn.execute(insert_query, {"pid": platform_id}).fetchone()
+        conn.commit()
+        return result[0]
 
 # --- PART 4: API ROUTES (ENDPOINTS) ---
 
@@ -160,16 +144,15 @@ def index():
 @app.route('/get_initial_data', methods=['GET'])
 def get_initial_data():
     """Fetches the conversation tree from the database."""
-    conn = create_connection()
-    if not conn: return jsonify({"error": "Database connection failed"}), 500
     try:
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT intent_name, bot_response, question_examples FROM knowledge_base")
-        records = cursor.fetchall()
-        chat_tree = format_chat_tree(records)
-        return jsonify(chat_tree)
-    finally:
-        if conn and conn.is_connected(): conn.close()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT intent_name, bot_response, question_examples FROM knowledge_base"))
+            records = [dict(row) for row in result.mappings()]
+            chat_tree = format_chat_tree(records)
+            return jsonify(chat_tree)
+    except Exception as e:
+        print(f"Error fetching initial data: {e}")
+        return jsonify({"error": "Could not connect to the database"}), 500
 
 @app.route('/save_appointment', methods=['POST'])
 def save_appointment():
@@ -182,35 +165,33 @@ def save_appointment():
     send_email_notification(name, phone, clinic)
     send_to_google_sheet(name, phone, clinic)
     
-    conn = create_connection()
-    if not conn: return jsonify({"error": "Database connection failed"}), 500
     try:
-        user_id = get_user_id(conn, data.get('platformId'))
-        cursor = conn.cursor()
-        query = "INSERT INTO appointments (user_id, patient_name, patient_phone, clinic_name) VALUES (%s, %s, %s, %s)"
-        cursor.execute(query, (user_id, name, phone, clinic))
-        conn.commit()
-        return jsonify({"status": "success"})
-    finally:
-        if conn and conn.is_connected(): conn.close()
+        with engine.connect() as conn:
+            user_id = get_user_id(conn, data.get('platformId'))
+            query = text("INSERT INTO appointments (user_id, patient_name, patient_phone, clinic_name) VALUES (:uid, :name, :phone, :clinic)")
+            conn.execute(query, {"uid": user_id, "name": name, "phone": phone, "clinic": clinic})
+            conn.commit()
+            return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"Error saving appointment: {e}")
+        return jsonify({"error": "Could not save appointment"}), 500
 
 @app.route('/save_approval', methods=['POST'])
 def save_approval():
     """Saves a medical approval request."""
     data = request.get_json()
-    conn = create_connection()
-    if not conn: return jsonify({"error": "Database connection failed"}), 500
     try:
-        user_id = get_user_id(conn, data.get('platformId'))
-        cursor = conn.cursor()
-        query = "INSERT INTO medical_approvals (user_id, identity_number, phone_number, request_date) VALUES (%s, %s, %s, %s)"
-        cursor.execute(query, (user_id, data.get('id_number'), data.get('phone'), data.get('date')))
-        conn.commit()
-        return jsonify({"status": "success"})
-    finally:
-        if conn and conn.is_connected(): conn.close()
+        with engine.connect() as conn:
+            user_id = get_user_id(conn, data.get('platformId'))
+            query = text("INSERT INTO medical_approvals (user_id, identity_number, phone_number, request_date) VALUES (:uid, :id, :phone, :date)")
+            conn.execute(query, {"uid": user_id, "id": data.get('id_number'), "phone": data.get('phone'), "date": data.get('date')})
+            conn.commit()
+            return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"Error saving approval: {e}")
+        return jsonify({"error": "Could not save approval"}), 500
 
 # --- PART 5: RUN THE APP ---
 if __name__ == '__main__':
-    # Render will use the Procfile, this is for local testing
-    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    # This part is for local testing. Render uses the Procfile.
+    app.run(debug=True, port=5000)
