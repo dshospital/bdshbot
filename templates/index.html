@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مستشفى دار الشفاء - شات بوت</title>
+    <style>
+        /* --- كود CSS محدث --- */
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
+        :root{--header-bg:#183D6F;--chat-bg:#F7F7F7;--bot-bubble-bg:#E0F5F4;--user-bubble-bg:#dcf8c6;--button-bg:#00A99D;--text-dark:#333;--text-light:#fff}
+        body{font-family:'Tajawal',sans-serif;background-color:#e5e5e5;height:200vh}
+        .chat-fab{position:fixed;bottom:30px;left:30px;width:65px;height:65px;background-color:var(--header-bg);border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:9998;transition:transform .3s ease;animation:pulse 2.5s infinite}
+        .chat-fab:hover{transform:scale(1.1);animation-play-state:paused}
+        .chat-fab img{width:100%;height:100%;border-radius:50%}
+        @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(24,61,111,.7)}70%{box-shadow:0 0 0 20px rgba(24,61,111,0)}100%{box-shadow:0 0 0 0 rgba(24,61,111,0)}}
+        .chat-widget-container{position:fixed;bottom:110px;left:30px;z-index:9999;opacity:0;transform:translateY(30px) scale(.9);transform-origin:bottom left;visibility:hidden;transition:all .4s cubic-bezier(.25,1,.5,1)}
+        .chat-widget-container.open{opacity:1;transform:translateY(0) scale(1);visibility:visible}
+        .chatbot-container{width:380px;height:600px;background-color:var(--chat-bg);border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden}
+        .chat-header{background-color:var(--header-bg);color:var(--text-light);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:relative}
+        .header-info{display:flex;align-items:center;gap:12px}
+        /* ✨ تعديل الشعار هنا ✨ */
+        .header-info .avatar{width:40px;height:40px;border-radius:50%;background-image:url(https://daralshefa.com.sa/wp-content/uploads/2023/11/Fav-1.png);background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#fff;border:2px solid var(--button-bg)}
+        .header-title h3{margin:0;font-size:16px;font-weight:700}
+        .header-title span{font-size:12px;opacity:.9}
+        .close-btn{background:0 0;border:none;color:white;font-size:30px;cursor:pointer;position:absolute;left:15px;top:50%;transform:translateY(-50%)}
+        .chat-messages{flex-grow:1;padding:10px 20px;overflow-y:auto}
+        .message{margin-bottom:20px;display:flex;flex-direction:column}
+        .message-bubble{padding:12px 18px;border-radius:25px;max-width:85%;word-wrap:break-word;line-height:1.6;color:var(--text-dark)}
+        .bot-message .message-bubble{background-color:var(--bot-bubble-bg);border-bottom-right-radius:8px;align-self:flex-start}
+        .user-message .message-bubble{background-color:var(--user-bubble-bg);border-bottom-left-radius:8px;align-self:flex-end}
+        .timestamp{font-size:11px;color:#999;margin-top:6px}
+        .bot-message .timestamp{align-self:flex-start;margin-right:10px}
+        .user-message .timestamp{align-self:flex-end;margin-left:10px}
+        .action-buttons{display:flex;flex-wrap:wrap;gap:10px;margin-top:15px;justify-content:flex-start}
+        .action-buttons button, .dropdown-submit {background-color:var(--button-bg);border:none;color:var(--text-light);padding:8px 20px;border-radius:30px;cursor:pointer;font-family:'Tajawal',sans-serif;font-weight:500;font-size:14px;transition:transform .2s}
+        .action-buttons button:hover, .dropdown-submit:hover {transform:scale(1.05)}
+        .chat-input-area{display:flex;padding:15px 20px;background-color:#fff;border-top:1px solid #e0e0e0}
+        .chat-input-area input{flex-grow:1;border:none;background-color:transparent;padding:10px;font-size:15px;font-family:'Tajawal',sans-serif}
+        .chat-input-area input:focus{outline:0}
+        .chat-input-area button{background-color:var(--button-bg);border:none;color:white;border-radius:50%;width:48px;height:48px;font-size:22px;margin-right:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background-color .3s}
+        .chat-input-area button:hover{background-color:#008a7e}
+        /* ✨ تنسيق القائمة المنسدلة ✨ */
+        select.clinic-dropdown{width:100%;padding:10px;margin-top:10px;border-radius:10px;border:1px solid #ccc;font-family:'Tajawal',sans-serif;font-size:15px;}
+        .dropdown-submit{margin-top:10px;width:100%;}
+        @media (max-width: 768px) {.chat-widget-container {left: 10px;right: 10px;bottom: 90px;width: auto; max-width: 400px;margin: 0 auto;} .chatbot-container {height: 70vh;max-height: 600px;} .chat-fab {bottom: 20px;left: 20px;}}
+    </style>
+</head>
+<body>
+    <div class="chat-widget-container" id="chat-widget">
+        <div class="chatbot-container">
+            <div class="chat-header"><div class="close-btn" id="close-chatbot-btn">&times;</div><div class="header-info"><div class="header-title"><h3>مستشفى دار الشفاء</h3><span>متصل الآن</span></div><div class="avatar"></div></div></div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-area"><button id="send-btn">➤</button><input type="text" id="user-input" placeholder="اسأل..."></div>
+        </div>
+    </div>
+    <div class="chat-fab" id="chat-fab"><img src="https://sp.labibabot.com//Images/WebImages/b97cc884-e8ea-4f3c-a004-000c78d20bd1.jpg" alt="Chat Icon"></div>
+
+    <script>
+        // --- ✨ JavaScript محدث بالكامل بالمنطق الجديد ✨ ---
+        const chatWidget = document.getElementById('chat-widget');
+        const fab = document.getElementById('chat-fab');
+        const closeBtn = document.getElementById('close-chatbot-btn');
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const API_URL = 'const API_URL = window.location.origin;'; 
+        
+        let chatTree = {};
+        let initialLoad = false;
+        let platformId = getPlatformId();
+        let conversationState = {}; // لتخزين البيانات المؤقتة مثل الاسم والجوال
+        let currentNodeId = null; // لتتبع المرحلة الحالية من الحوار
+
+        fab.addEventListener('click', loadChat, { once: true });
+        closeBtn.addEventListener('click', () => chatWidget.classList.remove('open'));
+
+        async function loadChat() {
+            chatWidget.classList.add('open');
+            if (initialLoad) return;
+            initialLoad = true;
+            addMessage('bot', 'الرجاء الانتظار...');
+            try {
+                const response = await fetch(`${API_URL}/get_initial_data`);
+                chatTree = await response.json();
+                chatMessages.innerHTML = ''; 
+                navigateTo('welcome');
+            } catch (error) {
+                addMessage('bot', 'عفواً، حدث خطأ.');
+            }
+        }
+
+        function navigateTo(nodeId) {
+            currentNodeId = nodeId;
+            const node = chatTree[nodeId];
+            if (!node) {
+                 addMessage('bot', 'عذراً لم أفهم طلبك.');
+                 return;
+            }
+            const buttons = node.ButtonsJSON || [];
+            // لا تعرض الرسالة إذا كانت فارغة (مفيد للروابط المباشرة)
+            if(node.MessageText) {
+                addMessage('bot', node.MessageText, buttons);
+            } else if (buttons.length > 0) {
+                 // لو كانت الرسالة فارغة ولكن هناك أزرار، يتم عرض الأزرار فقط
+                 addMessage('bot', '', buttons);
+            }
+            
+            // تفعيل أو تعطيل مربع الإدخال
+            userInput.disabled = (node.MessageType === 'buttons' || !node.MessageText);
+
+            if (nodeId === 'ask_clinic') {
+                userInput.disabled = true; // تعطيل الكتابة عند ظهور قائمة العيادات
+                addClinicsDropdown();
+            } else if (!userInput.disabled) {
+                userInput.focus();
+            }
+        }
+
+        function handleOptionClick(goToID, link = null) {
+            const userChoiceText = event.target.innerText;
+            addMessage('user', userChoiceText);
+            
+            const allButtons = document.querySelectorAll('.action-buttons, .dropdown-submit');
+            allButtons.forEach(buttonSet => buttonSet.remove());
+            
+            if (link) {
+                window.open(link, '_blank');
+                // بعد فتح الرابط، يمكننا عرض القائمة الرئيسية مجدداً
+                setTimeout(() => navigateTo('main_menu_ar'), 1000);
+                return;
+            }
+            
+            setTimeout(() => navigateTo(goToID), 500);
+        }
+
+        async function handleSend() {
+            const userText = userInput.value.trim();
+            if (userText === "") return;
+            addMessage('user', userText);
+            userInput.value = '';
+
+            // --- ✨ منطق الحوارات متعددة الخطوات ✨ ---
+            switch (currentNodeId) {
+                case 'ask_name':
+                    conversationState.name = userText;
+                    setTimeout(() => navigateTo('ask_phone'), 500);
+                    break;
+                case 'ask_phone':
+                    conversationState.phone = userText;
+                    setTimeout(() => navigateTo('ask_clinic'), 500);
+                    break;
+                case 'ask_approval_id':
+                    conversationState.id_number = userText;
+                    setTimeout(() => navigateTo('ask_approval_phone'), 500);
+                    break;
+                case 'ask_approval_phone':
+                    conversationState.phone = userText;
+                    setTimeout(() => navigateTo('ask_approval_date'), 500);
+                    break;
+                case 'ask_approval_date':
+                    conversationState.date = userText;
+                    addMessage('bot', 'جاري إرسال طلبك...');
+                    await saveApprovalToDB();
+                    setTimeout(() => navigateTo('approval_confirmation'), 500);
+                    break;
+                default:
+                    setTimeout(() => addMessage('bot', 'شكراً لك، لمتابعة الحوار استخدم الأزرار.'), 800);
+            }
+        }
+        
+        function addClinicsDropdown() {
+            const clinics = ['عيادات الباطنية و الغدد الصماء', 'عيادات الباطنية ومناظير الجهاز الهضمي', 'قسم الجراحة العامة', 'عيادة الانف والأذن والحنجرة', 'قسم العظام', 'قسم الأطفال', 'عيادة المخ و الأعصاب', 'قسم المسالك البولية', 'قسم النساء والولادة', 'قسم المختبر', 'قسم الطوارئ', 'قسم القلب والقسطرة القلبية', 'عيادة التخدير', 'عيادات الكلى', 'الصيدلية الداخلية', 'قسم الاسنان', 'عيادات الجلدية والتجميل', 'عيادة الأمراض الصدرية', 'عيادة الطب العام', 'مركز العلاج الطبيعي'];
+            let optionsHTML = clinics.map(clinic => `<option value="${clinic}">${clinic}</option>`).join('');
+            const dropdownHTML = `
+                <div class="message-bubble">
+                    <select id="clinic-select" class="clinic-dropdown">${optionsHTML}</select>
+                    <button class="dropdown-submit" onclick="handleClinicSelection()">تأكيد الاختيار</button>
+                </div>`;
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot-message';
+            messageDiv.innerHTML = dropdownHTML;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        async function handleClinicSelection() {
+            const clinicDropdown = document.getElementById('clinic-select');
+            const selectedClinic = clinicDropdown.value;
+            conversationState.clinic = selectedClinic;
+            // إخفاء القائمة المنسدلة بعد الاختيار
+            clinicDropdown.parentElement.innerHTML = `<p>تم اختيار: <strong>${selectedClinic}</strong></p>`;
+
+            addMessage('bot', 'جاري إرسال طلب موعدك...');
+            await saveAppointmentToDB();
+            setTimeout(() => navigateTo('booking_confirmation'), 500);
+        }
+
+        async function saveAppointmentToDB() {
+            try {
+                await fetch(`${API_URL}/save_appointment`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        platformId: platformId,
+                        name: conversationState.name,
+                        phone: conversationState.phone,
+                        clinic: conversationState.clinic,
+                    }),
+                });
+            } catch (error) { console.error('Failed to save appointment:', error); }
+        }
+        async function saveApprovalToDB() {
+            try {
+                await fetch(`${API_URL}/save_approval`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        platformId: platformId,
+                        id_number: conversationState.id_number,
+                        phone: conversationState.phone,
+                        date: conversationState.date,
+                    }),
+                });
+            } catch (error) { console.error('Failed to save approval:', error); }
+        }
+
+        function addMessage(sender, text, buttons = []) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender === 'user' ? 'user-message' : 'bot-message'}`;
+            let buttonsHTML = '';
+            if (buttons.length > 0) {
+                buttonsHTML = '<div class="action-buttons">';
+                buttons.forEach(button => {
+                    if (button.link) {
+                        buttonsHTML += `<button onclick="handleOptionClick(null, '${button.link}')">${button.text}</button>`;
+                    } else {
+                        buttonsHTML += `<button onclick="handleOptionClick('${button.goToID}')">${button.text}</button>`;
+                    }
+                });
+                buttonsHTML += '</div>';
+            }
+            const time = new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', hour12: true });
+            messageDiv.innerHTML = `<div class="message-bubble">${text} ${buttonsHTML}</div><div class="timestamp">${time}</div>`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function getPlatformId() {
+            let id = localStorage.getItem('chatbot_platform_id');
+            if (!id) {
+                id = `web_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                localStorage.setItem('chatbot_platform_id', id);
+            }
+            return id;
+        }
+
+        sendBtn.addEventListener('click', handleSend);
+        userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleSend(); });
+    </script>
+</body>
+</html>
