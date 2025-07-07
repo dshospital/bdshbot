@@ -30,14 +30,14 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL') 
 GOOGLE_SCRIPT_URL = os.environ.get('GOOGLE_SCRIPT_URL')
 
-# --- ✨ Database Connection for Render - THIS IS THE FIX ✨ ---
+# --- ✨ Database Connection for Render - THIS IS THE FINAL FIX ✨ ---
 # This code now ONLY reads the cloud database URL from Render's environment variables.
+# It will fail if the variable is not set, which is the correct behavior.
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    # Fix for SQLAlchemy compatibility
+    # Fix for SQLAlchemy compatibility on Render
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# The app will fail to start if DATABASE_URL is not set, which is the correct behavior on a server.
 engine = create_engine(DATABASE_URL)
 
 # --- PART 3: HELPER FUNCTIONS ---
@@ -53,16 +53,15 @@ def send_email_notification(name, phone, clinic):
         print("FATAL ERROR: Google credentials or token not set in environment variables.")
         return
 
-    creds_data = json.loads(creds_data_str)
-    token_data = json.loads(token_data_str)
-    creds = Credentials.from_authorized_user_info(token_data, SCOPES)
-    
-    if not creds or not creds.valid:
-        # On a server, we can't refresh interactively. The token should be valid.
-        print("Credentials not valid or expired.")
-        return
-
     try:
+        creds_data = json.loads(creds_data_str)
+        token_data = json.loads(token_data_str)
+        creds = Credentials.from_authorized_user_info(token_data, SCOPES)
+        
+        if not creds or not creds.valid:
+            print("Credentials not valid or expired.")
+            return
+
         service = build('gmail', 'v1', credentials=creds)
         html_body = f"""
         <html><body dir="rtl" style="font-family: Arial, sans-serif;">
@@ -146,9 +145,9 @@ def get_initial_data():
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT intent_name, bot_response, question_examples FROM knowledge_base"))
-            # Convert result to a list of dicts
             records = [dict(row) for row in result.mappings()]
             if not records:
+                print("Knowledge base is empty. Check your database.")
                 return jsonify({"error": "Knowledge base is empty."}), 404
             
             chat_tree = format_chat_tree(records)
