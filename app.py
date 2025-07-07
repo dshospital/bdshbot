@@ -27,8 +27,8 @@ CORS(app)
 
 # --- Configuration is read from Environment Variables on Render ---
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL', 'marketing@daralshefa.com') 
-GOOGLE_SCRIPT_URL = os.environ.get('GOOGLE_SCRIPT_URL', 'https://script.google.com/macros/s/AKfycbxNDYje0Ce2jTN_wFiZG_QsCDp1lAhsW_RHBJBK4EYOUtNW-DSHQJgaip8s32NyNcZk/exec')
+RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL') 
+GOOGLE_SCRIPT_URL = os.environ.get('GOOGLE_SCRIPT_URL')
 
 # --- ✨ Database Connection for Render - THIS IS THE FIX ✨ ---
 # This code now ONLY reads the cloud database URL from Render's environment variables.
@@ -37,7 +37,7 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     # Fix for SQLAlchemy compatibility
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# If DATABASE_URL is not found, the app will fail, which is expected on the server.
+# The app will fail to start if DATABASE_URL is not set, which is the correct behavior on a server.
 engine = create_engine(DATABASE_URL)
 
 # --- PART 3: HELPER FUNCTIONS ---
@@ -49,18 +49,17 @@ def send_email_notification(name, phone, clinic):
     token_data_str = os.environ.get('GOOGLE_TOKEN_JSON')
     creds_data_str = os.environ.get('GOOGLE_CREDENTIALS_JSON')
 
-    if not creds_data_str:
-        print("FATAL ERROR: GOOGLE_CREDENTIALS_JSON environment variable not set on Render.")
+    if not creds_data_str or not token_data_str:
+        print("FATAL ERROR: Google credentials or token not set in environment variables.")
         return
 
     creds_data = json.loads(creds_data_str)
-
-    if token_data_str:
-        token_data = json.loads(token_data_str)
-        creds = Credentials.from_authorized_user_info(token_data, SCOPES)
+    token_data = json.loads(token_data_str)
+    creds = Credentials.from_authorized_user_info(token_data, SCOPES)
     
     if not creds or not creds.valid:
-        print("Credentials not valid or expired. This needs manual intervention for the first run.")
+        # On a server, we can't refresh interactively. The token should be valid.
+        print("Credentials not valid or expired.")
         return
 
     try:
@@ -128,7 +127,6 @@ def get_user_id(conn, platform_id):
     if result:
         return result[0]
     else:
-        # Use RETURNING for PostgreSQL, which is what Render uses
         insert_query = text("INSERT INTO users (platform_user_id) VALUES (:pid) RETURNING user_id")
         result = conn.execute(insert_query, {"pid": platform_id}).fetchone()
         conn.commit()
@@ -147,7 +145,6 @@ def get_initial_data():
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT intent_name, bot_response, question_examples FROM knowledge_base"))
-            # Convert result to a list of dicts
             records = [dict(row) for row in result.mappings()]
             if not records:
                 return jsonify({"error": "Knowledge base is empty."}), 404
