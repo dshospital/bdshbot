@@ -8,7 +8,7 @@ from email.mime.text import MIMEText
 from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 
-# Database library that works with both PostgreSQL (Render) and MySQL (Local)
+# Database library that works with PostgreSQL
 from sqlalchemy import create_engine, text
 
 # For Google Sheets and other HTTP requests
@@ -30,16 +30,14 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL', 'marketing@daralshefa.com') 
 GOOGLE_SCRIPT_URL = os.environ.get('GOOGLE_SCRIPT_URL', 'https://script.google.com/macros/s/AKfycbxNDYje0Ce2jTN_wFiZG_QsCDp1lAhsW_RHBJBK4EYOUtNW-DSHQJgaip8s32NyNcZk/exec')
 
-# --- ✨ Smart Database Connection - THIS IS THE FIX ✨ ---
-# Render provides a DATABASE_URL. For local testing, we fall back to MySQL.
+# --- ✨ Database Connection for Render - THIS IS THE FIX ✨ ---
+# This code now ONLY reads the cloud database URL from Render's environment variables.
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     # Fix for SQLAlchemy compatibility
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-else:
-    # This is only for local testing, Render will use the DATABASE_URL from environment
-    DATABASE_URL = "mysql+mysqlconnector://root:@localhost/test_db"
 
+# If DATABASE_URL is not found, the app will fail, which is expected on the server.
 engine = create_engine(DATABASE_URL)
 
 # --- PART 3: HELPER FUNCTIONS ---
