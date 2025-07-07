@@ -32,9 +32,11 @@ GOOGLE_SCRIPT_URL = os.environ.get('GOOGLE_SCRIPT_URL')
 
 # --- ✨ Database Connection for Render - THIS IS THE FINAL FIX ✨ ---
 # This code now ONLY reads the cloud database URL from Render's environment variables.
-# It will fail if the variable is not set, which is the correct behavior.
 DATABASE_URL = os.environ.get('DATABASE_URL')
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+if not DATABASE_URL:
+    raise ValueError("FATAL ERROR: DATABASE_URL environment variable is not set.")
+
+if DATABASE_URL.startswith("postgres://"):
     # Fix for SQLAlchemy compatibility on Render
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
