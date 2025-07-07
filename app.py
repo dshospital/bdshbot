@@ -25,18 +25,19 @@ from googleapiclient.errors import HttpError
 app = Flask(__name__, template_folder='templates')
 CORS(app)
 
-# --- Configuration will be read from Environment Variables on Render ---
+# --- Configuration is read from Environment Variables on Render ---
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
-RECIPIENT_EMAIL = 'marketing@daralshefa.com' 
-GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxNDYje0Ce2jTN_wFiZG_QsCDp1lAhsW_RHBJBK4EYOUtNW-DSHQJgaip8s32NyNcZk/exec'
+RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL', 'marketing@daralshefa.com') 
+GOOGLE_SCRIPT_URL = os.environ.get('GOOGLE_SCRIPT_URL', 'https://script.google.com/macros/s/AKfycbxNDYje0Ce2jTN_wFiZG_QsCDp1lAhsW_RHBJBK4EYOUtNW-DSHQJgaip8s32NyNcZk/exec')
 
-# --- ✨ Smart Database Connection ---
+# --- ✨ Smart Database Connection - THIS IS THE FIX ✨ ---
 # Render provides a DATABASE_URL. For local testing, we fall back to MySQL.
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    # Fix for SQLAlchemy compatibility
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 else:
-    # Local MySQL connection string
+    # This is only for local testing, Render will use the DATABASE_URL from environment
     DATABASE_URL = "mysql+mysqlconnector://root:@localhost/test_db"
 
 engine = create_engine(DATABASE_URL)
@@ -62,8 +63,6 @@ def send_email_notification(name, phone, clinic):
     
     if not creds or not creds.valid:
         print("Credentials not valid or expired. This needs manual intervention for the first run.")
-        # On a server, you can't do the interactive flow. 
-        # The token must be generated locally and its JSON content pasted into the environment variable.
         return
 
     try:
@@ -88,12 +87,14 @@ def send_email_notification(name, phone, clinic):
     except Exception as e:
         print(f"An error occurred while sending email: {e}")
 
+
 def send_to_google_sheet(name, phone, clinic):
     """Sends data to the Google Sheet."""
     try:
-        payload = {"name": name, "phone": phone, "clinic": clinic}
-        requests.post(GOOGLE_SCRIPT_URL, json=payload)
-        print(f"Data sent to Google Sheet successfully.")
+        if GOOGLE_SCRIPT_URL:
+            payload = {"name": name, "phone": phone, "clinic": clinic}
+            requests.post(GOOGLE_SCRIPT_URL, json=payload)
+            print(f"Data sent to Google Sheet successfully.")
     except Exception as e:
         print(f"Failed to send data to Google Sheet: {e}")
 
@@ -129,6 +130,7 @@ def get_user_id(conn, platform_id):
     if result:
         return result[0]
     else:
+        # Use RETURNING for PostgreSQL, which is what Render uses
         insert_query = text("INSERT INTO users (platform_user_id) VALUES (:pid) RETURNING user_id")
         result = conn.execute(insert_query, {"pid": platform_id}).fetchone()
         conn.commit()
@@ -147,7 +149,11 @@ def get_initial_data():
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT intent_name, bot_response, question_examples FROM knowledge_base"))
+            # Convert result to a list of dicts
             records = [dict(row) for row in result.mappings()]
+            if not records:
+                return jsonify({"error": "Knowledge base is empty."}), 404
+            
             chat_tree = format_chat_tree(records)
             return jsonify(chat_tree)
     except Exception as e:
@@ -176,22 +182,7 @@ def save_appointment():
         print(f"Error saving appointment: {e}")
         return jsonify({"error": "Could not save appointment"}), 500
 
-@app.route('/save_approval', methods=['POST'])
-def save_approval():
-    """Saves a medical approval request."""
-    data = request.get_json()
-    try:
-        with engine.connect() as conn:
-            user_id = get_user_id(conn, data.get('platformId'))
-            query = text("INSERT INTO medical_approvals (user_id, identity_number, phone_number, request_date) VALUES (:uid, :id, :phone, :date)")
-            conn.execute(query, {"uid": user_id, "id": data.get('id_number'), "phone": data.get('phone'), "date": data.get('date')})
-            conn.commit()
-            return jsonify({"status": "success"})
-    except Exception as e:
-        print(f"Error saving approval: {e}")
-        return jsonify({"error": "Could not save approval"}), 500
-
 # --- PART 5: RUN THE APP ---
 if __name__ == '__main__':
     # This part is for local testing. Render uses the Procfile.
-    app.run(debug=True, port=5000)
+    app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
