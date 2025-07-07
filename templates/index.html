@@ -6,7 +6,7 @@
     <title>مستشفى دار الشفاء - شات بوت</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-        :root{--header-bg:#273159;--chat-bg:#F7F7F7;--bot-bubble-bg:#E0F5F4;--user-bubble-bg:#dcf8c6;--button-bg:#00A99D;--text-dark:#333;--text-light:#fff}
+        :root{--header-bg:#183D6F;--chat-bg:#F7F7F7;--bot-bubble-bg:#E0F5F4;--user-bubble-bg:#dcf8c6;--button-bg:#00A99D;--text-dark:#333;--text-light:#fff}
         body{font-family:'Tajawal',sans-serif;background-color:#e5e5e5;margin:0;padding:20px;height:150vh;}
         .chat-fab{position:fixed;bottom:30px;left:30px;width:65px;height:65px;background-color:var(--header-bg);border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:9998;transition:transform .3s ease;animation:pulse 2.5s infinite}
         .chat-fab:hover{transform:scale(1.1);animation-play-state:paused}
@@ -53,8 +53,6 @@
     <div class="chat-fab" id="chat-fab"><img src="https://daralshefa.com.sa/wp-content/uploads/2022/10/logo.png" alt="Chat Icon"></div>
 
     <script>
-        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxNDYje0Ce2jTN_wFiZG_QsCDp1lAhsW_RHBJBK4EYOUtNW-DSHQJgaip8s32NyNcZk/exec'; // ❗ تأكد من أن هذا هو الرابط المحدث
-
         const chatWidget = document.getElementById('chat-widget');
         const fab = document.getElementById('chat-fab');
         const closeBtn = document.getElementById('close-chatbot-btn');
@@ -62,9 +60,12 @@
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         
+        const API_URL = 'https://daralshefa-bot.onrender.com';
+        
         let chatTree = {};
         let initialLoad = false;
-        let conversationState = {}; 
+        let platformId = getPlatformId();
+        let conversationState = {};
         let currentNodeId = null;
 
         fab.addEventListener('click', loadChat, { once: true });
@@ -76,12 +77,16 @@
             initialLoad = true;
             addMessage('bot', 'الرجاء الانتظار...');
             try {
-                const response = await fetch(SCRIPT_URL);
+                const response = await fetch(`${API_URL}/get_initial_data`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 chatTree = await response.json();
                 chatMessages.innerHTML = ''; 
                 navigateTo('welcome');
             } catch (error) {
-                addMessage('bot', 'عفواً، حدث خطأ في الاتصال.');
+                addMessage('bot', 'عفواً، حدث خطأ في الاتصال بالخادم.');
+                console.error("Error fetching chat tree:", error);
             }
         }
 
@@ -93,15 +98,15 @@
                  return;
             }
             const buttons = node.ButtonsJSON || [];
-            
             if(node.MessageText) {
                 addMessage('bot', node.MessageText, buttons);
             } else if (buttons.length > 0) {
                  addMessage('bot', '', buttons);
             }
             
-            userInput.disabled = node.MessageType !== 'text';
-            if (node.MessageType === 'dropdown') {
+            userInput.disabled = (node.MessageType !== 'text');
+
+            if (nodeId === 'booking_ask_clinic') {
                 userInput.disabled = true;
                 addClinicsDropdown();
             } else if (!userInput.disabled) {
@@ -131,15 +136,14 @@
             addMessage('user', userText);
             userInput.value = '';
 
-            // --- ✨ منطق محدث للتعامل مع تدفق التأمين ✨ ---
             switch (currentNodeId) {
-                case 'ask_name':
+                case 'booking_start':
                     conversationState.name = userText;
-                    setTimeout(() => navigateTo('ask_phone'), 500);
+                    setTimeout(() => navigateTo('booking_ask_phone'), 500);
                     break;
-                case 'ask_phone':
+                case 'booking_ask_phone':
                     conversationState.phone = userText;
-                    setTimeout(() => navigateTo('ask_clinic'), 500);
+                    setTimeout(() => navigateTo('booking_ask_clinic'), 500);
                     break;
                 case 'insurance_coverage_start':
                     conversationState.phone = userText;
@@ -151,8 +155,6 @@
                     break;
                 case 'insurance_ask_dob':
                     conversationState.date = userText;
-                    addMessage('bot', 'جاري إرسال طلبك...');
-                    await saveInsuranceInquiryToDB(); // ✨ استدعاء الدالة الجديدة
                     setTimeout(() => navigateTo('insurance_coverage_confirmation'), 500);
                     break;
                 default:
@@ -178,9 +180,16 @@
         async function handleClinicSelection() {
             const clinicDropdown = document.getElementById('clinic-select');
             const selectedClinic = clinicDropdown.value;
-            if (!selectedClinic) { return; }
+            if (!selectedClinic) {
+                const tempMsg = document.createElement('div');
+                tempMsg.textContent = "يرجى اختيار عيادة.";
+                tempMsg.style.color = 'red';
+                tempMsg.style.textAlign = 'center';
+                clinicDropdown.parentElement.appendChild(tempMsg);
+                setTimeout(() => tempMsg.remove(), 2000);
+                return;
+            }
             conversationState.clinic = selectedClinic;
-            
             clinicDropdown.parentElement.innerHTML = `<p>تم اختيار: <strong>${selectedClinic}</strong></p>`;
 
             addMessage('bot', 'جاري إرسال طلب موعدك...');
@@ -190,33 +199,17 @@
 
         async function saveAppointmentToDB() {
             try {
-                await fetch(SCRIPT_URL, {
+                await fetch(`${API_URL}/save_appointment`, {
                     method: 'POST',
-                    mode: 'no-cors',
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        type: 'appointment', // ✨ تحديد نوع الطلب
+                        platformId: platformId,
                         name: conversationState.name,
                         phone: conversationState.phone,
                         clinic: conversationState.clinic,
                     }),
                 });
             } catch (error) { console.error('Failed to save appointment:', error); }
-        }
-
-        // --- ✨ دالة جديدة لحفظ بيانات التأمين ✨ ---
-        async function saveInsuranceInquiryToDB() {
-             try {
-                await fetch(SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({
-                        type: 'insurance_inquiry', // ✨ تحديد نوع الطلب
-                        phone: conversationState.phone,
-                        id_number: conversationState.id_number,
-                        date: conversationState.date,
-                    }),
-                });
-            } catch (error) { console.error('Failed to save insurance inquiry:', error); }
         }
 
         function addMessage(sender, text, buttons = []) {
@@ -238,6 +231,15 @@
             messageDiv.innerHTML = `<div class="message-bubble">${text} ${buttonsHTML}</div><div class="timestamp">${time}</div>`;
             chatMessages.appendChild(messageDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function getPlatformId() {
+            let id = localStorage.getItem('chatbot_platform_id');
+            if (!id) {
+                id = `web_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                localStorage.setItem('chatbot_platform_id', id);
+            }
+            return id;
         }
 
         sendBtn.addEventListener('click', handleSend);
