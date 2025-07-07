@@ -60,7 +60,6 @@
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
         
-        // ✨ This is the corrected API URL ✨
         const API_URL = 'https://daralshefa-bot.onrender.com';
         
         let chatTree = {};
@@ -79,9 +78,7 @@
             addMessage('bot', 'الرجاء الانتظار...');
             try {
                 const response = await fetch(`${API_URL}/get_initial_data`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
                 chatTree = await response.json();
                 chatMessages.innerHTML = ''; 
                 navigateTo('welcome');
@@ -105,9 +102,9 @@
                  addMessage('bot', '', buttons);
             }
             
-            userInput.disabled = (node.MessageType === 'buttons' || !node.MessageText);
+            userInput.disabled = node.MessageType !== 'text';
 
-            if (node.MessageType === 'dropdown') {
+            if (nodeId === 'booking_ask_clinic') { // Note: using the correct NodeID from the database
                 userInput.disabled = true;
                 addClinicsDropdown();
             } else if (!userInput.disabled) {
@@ -137,30 +134,37 @@
             addMessage('user', userText);
             userInput.value = '';
 
+            // --- ✨ منطق الحوار المحدث والمصحح ✨ ---
             switch (currentNodeId) {
-                case 'ask_name':
+                case 'booking_start': // After user clicks "حجز موعد", bot asks for name. This is the user's reply.
                     conversationState.name = userText;
-                    setTimeout(() => navigateTo('ask_phone'), 500);
+                    setTimeout(() => navigateTo('booking_ask_phone'), 500); // Now ask for the phone.
                     break;
-                case 'ask_phone':
+                case 'booking_ask_phone': // After bot asks for phone, this is the user's reply.
                     conversationState.phone = userText;
-                    setTimeout(() => navigateTo('ask_clinic'), 500);
+                    setTimeout(() => navigateTo('booking_ask_clinic'), 500); // Now ask for clinic.
                     break;
-                case 'ask_approval_id':
+                
+                case 'insurance_coverage_start': // After user clicks "استعلام عن تغطية التأمين", bot asks for phone. This is the reply.
+                    conversationState.phone = userText;
+                    setTimeout(() => navigateTo('insurance_ask_id'), 500);
+                    break;
+                case 'insurance_ask_id': // After bot asks for ID.
                     conversationState.id_number = userText;
-                    setTimeout(() => navigateTo('ask_approval_phone'), 500);
+                    setTimeout(() => navigateTo('insurance_ask_dob'), 500);
                     break;
-                case 'ask_approval_phone':
-                    conversationState.phone = userText;
-                    setTimeout(() => navigateTo('ask_approval_date'), 500);
-                    break;
-                case 'ask_approval_date':
+                case 'insurance_ask_dob': // After bot asks for Date of Birth.
                     conversationState.date = userText;
-                    addMessage('bot', 'جاري إرسال طلبك...');
-                    await saveApprovalToDB();
-                    setTimeout(() => navigateTo('approval_confirmation'), 500);
+                    // In a real scenario, you would now send this data to a different endpoint.
+                    setTimeout(() => navigateTo('insurance_coverage_confirmation'), 500);
                     break;
+
+                case 'ask_approval_id': // After user clicks "استعلام عن طلب موافقة"
+                    // Handle this logic similarly
+                    break;
+
                 default:
+                    // Fallback for any other text input that we don't have a specific flow for.
                     setTimeout(() => addMessage('bot', 'شكراً لك، لمتابعة الحوار استخدم الأزرار.'), 800);
             }
         }
@@ -170,7 +174,7 @@
             let optionsHTML = clinics.map(clinic => `<option value="${clinic}">${clinic}</option>`).join('');
             const dropdownHTML = `
                 <div class="message-bubble">
-                    <select id="clinic-select" class="clinic-dropdown">${optionsHTML}</select>
+                    <select id="clinic-select" class="clinic-dropdown"><option value="">- قم بتحديد العيادة -</option>${optionsHTML}</select>
                     <button class="dropdown-submit" onclick="handleClinicSelection()">تأكيد الاختيار</button>
                 </div>`;
             const messageDiv = document.createElement('div');
@@ -183,6 +187,10 @@
         async function handleClinicSelection() {
             const clinicDropdown = document.getElementById('clinic-select');
             const selectedClinic = clinicDropdown.value;
+            if (!selectedClinic) { // Don't proceed if no clinic is chosen
+                alert("يرجى اختيار عيادة.");
+                return;
+            }
             conversationState.clinic = selectedClinic;
             clinicDropdown.parentElement.innerHTML = `<p>تم اختيار: <strong>${selectedClinic}</strong></p>`;
 
@@ -204,20 +212,6 @@
                     }),
                 });
             } catch (error) { console.error('Failed to save appointment:', error); }
-        }
-        async function saveApprovalToDB() {
-            try {
-                await fetch(`${API_URL}/save_approval`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        platformId: platformId,
-                        id_number: conversationState.id_number,
-                        phone: conversationState.phone,
-                        date: conversationState.date,
-                    }),
-                });
-            } catch (error) { console.error('Failed to save approval:', error); }
         }
 
         function addMessage(sender, text, buttons = []) {
