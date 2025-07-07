@@ -127,6 +127,7 @@ def get_user_id(conn, platform_id):
     if result:
         return result[0]
     else:
+        # Use RETURNING for PostgreSQL, which is what Render uses
         insert_query = text("INSERT INTO users (platform_user_id) VALUES (:pid) RETURNING user_id")
         result = conn.execute(insert_query, {"pid": platform_id}).fetchone()
         conn.commit()
@@ -145,6 +146,7 @@ def get_initial_data():
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT intent_name, bot_response, question_examples FROM knowledge_base"))
+            # Convert result to a list of dicts
             records = [dict(row) for row in result.mappings()]
             if not records:
                 return jsonify({"error": "Knowledge base is empty."}), 404
