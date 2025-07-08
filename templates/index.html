@@ -79,9 +79,17 @@
             try {
                 const response = await fetch(`${API_URL}/get_initial_data`);
                 if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
-                chatTree = await response.json();
-                chatMessages.innerHTML = ''; 
-                navigateTo('welcome');
+                
+                // ✨ FIX: Add a check to ensure the received data is a valid object ✨
+                const data = await response.json();
+                if (data && typeof data === 'object') {
+                    chatTree = data;
+                    chatMessages.innerHTML = ''; 
+                    navigateTo('welcome');
+                } else {
+                    // This handles cases where the server returns null or invalid data
+                    throw new Error('Invalid data structure received from server.');
+                }
             } catch (error) {
                 addMessage('bot', 'عفواً، حدث خطأ في الاتصال بالخادم.');
                 console.error("Error fetching chat tree:", error);
@@ -90,7 +98,8 @@
 
         function navigateTo(nodeId) {
             currentNodeId = nodeId;
-            const node = chatTree[nodeId];
+            // ✨ FIX: Add a check to ensure chatTree is not null before accessing it ✨
+            const node = chatTree ? chatTree[nodeId] : null;
             if (!node) {
                  addMessage('bot', 'عذراً لم أفهم طلبك.');
                  return;
