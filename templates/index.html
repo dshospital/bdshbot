@@ -15,8 +15,6 @@
         .chat-widget-container{position:fixed;bottom:110px;left:30px;z-index:9999;opacity:0;transform:translateY(30px) scale(.9);transform-origin:bottom left;visibility:hidden;transition:all .4s cubic-bezier(.25,1,.5,1)}
         .chat-widget-container.open{opacity:1;transform:translateY(0) scale(1);visibility:visible}
         .chatbot-container{width:380px;height:600px;background-color:var(--chat-bg);border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden}
-        
-        /* --- ✨ Header UX/UI Improvements ✨ --- */
         .chat-header{background-color:var(--header-bg);color:var(--text-light);padding:15px 20px;display:flex;align-items:center;justify-content:space-between;}
         .header-info{display:flex;align-items:center;gap:12px;}
         .header-info .avatar{width:45px;height:45px;border-radius:50%;background-image:url(https://daralshefa.com.sa/wp-content/uploads/2023/11/Fav-1-150x150.png);background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#fff;border:2px solid var(--button-bg)}
@@ -24,8 +22,6 @@
         .header-title h3{margin:0;font-size:16px;font-weight:700}.header-title span{font-size:12px;opacity:.9}
         .end-chat-btn{background-color:transparent;border:1px solid rgba(255, 255, 255, 0.5);color:white;font-size:13px;cursor:pointer;padding: 6px 14px; border-radius: 20px; font-family:'Tajawal',sans-serif; transition: background-color 0.3s, color 0.3s;}
         .end-chat-btn:hover {background-color: rgba(255, 255, 255, 0.1);}
-        /* ------------------------------------ */
-
         .chat-messages{flex-grow:1;padding:10px 20px;overflow-y:auto}
         .message{margin-bottom:20px;display:flex;flex-direction:column}
         .message-bubble{padding:12px 18px;border-radius:25px;max-width:85%;word-wrap:break-word;line-height:1.6;color:var(--text-dark)}
@@ -50,7 +46,6 @@
 <body>
     <div class="chat-widget-container" id="chat-widget">
         <div class="chatbot-container">
-            <!-- ✨ UI Change: Updated Header Structure ✨ -->
             <div class="chat-header">
                 <button class="end-chat-btn" id="end-chat-btn">إنهاء المحادثة</button>
                 <div class="header-info">
@@ -62,12 +57,11 @@
             <div class="chat-input-area"><button id="send-btn">➤</button><input type="text" id="user-input" placeholder="اسأل..."></div>
         </div>
     </div>
-    <div class="chat-fab" id="chat-fab"><img src="https://daralshefa.com.sa/wp-content/uploads/2022/10/logo.png" alt="Chat Icon"></div>
+    <div class="chat-fab" id="chat-fab"><img src="https://sp.labibabot.com//Images/WebImages/b97cc884-e8ea-4f3c-a004-000c78d20bd1.jpg" alt="Chat Icon"></div>
 
     <script>
         const chatWidget = document.getElementById('chat-widget');
         const fab = document.getElementById('chat-fab');
-        // ✨ JS Change: Updated button ID ✨
         const closeBtn = document.getElementById('end-chat-btn'); 
         const chatMessages = document.getElementById('chat-messages');
         const userInput = document.getElementById('user-input');
@@ -146,7 +140,6 @@
                 return;
             }
             
-            // ✨ Handle Symptom Checker "No" button ✨
             if (goToID === 'symptom_checker_analyze') {
                 getSymptomAnalysis(conversationState.symptoms.join(', '));
                 return;
@@ -161,9 +154,7 @@
             addMessage('user', userText);
             userInput.value = '';
 
-            // --- ✨ This switch statement now handles the interactive Gemini flow ✨ ---
             switch (currentNodeId) {
-                // Booking Flow
                 case 'booking_start':
                     conversationState.name = userText;
                     setTimeout(() => navigateTo('booking_ask_phone'), 500);
@@ -173,17 +164,15 @@
                     setTimeout(() => navigateTo('booking_ask_clinic'), 500);
                     break;
                 
-                // ✨ Gemini Symptom Checker Flow ✨
                 case 'symptom_checker_start':
-                    conversationState.symptoms = [userText]; // Start a new list of symptoms
+                    conversationState.symptoms = [userText];
                     setTimeout(() => navigateTo('symptom_checker_ask_more'), 500);
                     break;
                 case 'symptom_checker_get_more':
-                    conversationState.symptoms.push(userText); // Add more symptoms
+                    conversationState.symptoms.push(userText);
                     setTimeout(() => navigateTo('symptom_checker_ask_more'), 500);
                     break;
 
-                // Insurance Coverage Flow
                 case 'insurance_coverage_start':
                     conversationState.phone = userText;
                     setTimeout(() => navigateTo('insurance_ask_id'), 500);
@@ -194,10 +183,10 @@
                     break;
                 case 'insurance_ask_dob':
                     conversationState.date = userText;
+                    await saveInsuranceInquiryToDB();
                     setTimeout(() => navigateTo('insurance_coverage_confirmation'), 500);
                     break;
 
-                // Approval Status Inquiry Flow
                 case 'approval_inquiry_start':
                     conversationState.id_or_phone = userText;
                     setTimeout(() => navigateTo('approval_ask_date'), 500);
@@ -210,7 +199,6 @@
                     break;
 
                 default:
-                    // ✨ Gemini General Question Answering ✨
                     getGeneralAnswer(userText);
             }
         }
@@ -222,7 +210,14 @@
             const apiKey = ""; 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
             
-            const prompt = `You are a helpful medical triage assistant for a hospital in Saudi Arabia. A user has described their symptoms. Based on these symptoms, suggest ONLY ONE most appropriate medical clinic for them to visit from the provided list. Respond in Arabic. Your entire response should be ONLY the name of the clinic and nothing else.
+            const prompt = `You are an expert medical triage assistant for a hospital in Saudi Arabia. A user has described their symptoms. Your task is to act like a real doctor:
+            1. Analyze the symptoms provided.
+            2. Based on the symptoms, determine the single most appropriate medical clinic for the user to visit from the provided list.
+            3. Your response must be in Arabic and follow this exact format:
+            "بناءً على الأعراض التي وصفتها، وهي: [List of symptoms], فإنني أوصي بزيارة **[Clinic Name]**. [Provide a brief, one-sentence explanation for why this clinic is suitable]."
+            
+            Example Response: "بناءً على الأعراض التي وصفتها، وهي: صداع وحرارة، فإنني أوصي بزيارة **عيادة الطب العام**. هذه العيادة هي الأنسب للتعامل مع الأعراض العامة والحمى."
+
             Available clinics: [${clinics.join(", ")}].
             User symptoms: "${symptoms}"`;
 
@@ -235,9 +230,9 @@
                 if (!response.ok) throw new Error(`API Error: ${response.status}`);
                 
                 const result = await response.json();
-                const suggestedClinic = result.candidates[0].content.parts[0].text.trim();
+                const recommendation = result.candidates[0].content.parts[0].text.trim();
                 
-                const responseText = `بناءً على الأعراض التي وصفتها، نوصي بزيارة: <b>${suggestedClinic}</b>. هل تود حجز موعد الآن في هذه العيادة؟`;
+                const responseText = `${recommendation}<br><br>هل تود حجز موعد الآن في العيادة الموصى بها؟`;
                 const buttons = [
                     { "text": "نعم، احجز موعد", "goToID": "booking_start" },
                     { "text": "لا، العودة للقائمة الرئيسية", "goToID": "main_menu_ar" }
