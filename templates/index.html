@@ -78,9 +78,7 @@
             addMessage('bot', 'الرجاء الانتظار...');
             try {
                 const response = await fetch(`${API_URL}/get_initial_data`);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
                 chatTree = await response.json();
                 chatMessages.innerHTML = ''; 
                 navigateTo('welcome');
@@ -136,7 +134,9 @@
             addMessage('user', userText);
             userInput.value = '';
 
+            // --- ✨ منطق محدث للتعامل مع كل التدفقات ✨ ---
             switch (currentNodeId) {
+                // Booking Flow
                 case 'booking_start':
                     conversationState.name = userText;
                     setTimeout(() => navigateTo('booking_ask_phone'), 500);
@@ -145,6 +145,8 @@
                     conversationState.phone = userText;
                     setTimeout(() => navigateTo('booking_ask_clinic'), 500);
                     break;
+                
+                // Insurance Coverage Flow
                 case 'insurance_coverage_start':
                     conversationState.phone = userText;
                     setTimeout(() => navigateTo('insurance_ask_id'), 500);
@@ -155,10 +157,22 @@
                     break;
                 case 'insurance_ask_dob':
                     conversationState.date = userText;
-                    addMessage('bot', 'جاري إرسال طلبك...');
-                    await saveInsuranceInquiryToDB();
+                    // In a real scenario, you would now send this data to a different endpoint.
                     setTimeout(() => navigateTo('insurance_coverage_confirmation'), 500);
                     break;
+
+                // ✨ Approval Status Inquiry Flow (New) ✨
+                case 'approval_inquiry_start':
+                    conversationState.id_or_phone = userText;
+                    setTimeout(() => navigateTo('approval_ask_date'), 500);
+                    break;
+                case 'approval_ask_date':
+                    conversationState.request_date = userText;
+                    addMessage('bot', 'جاري إرسال طلبك...');
+                    await saveApprovalInquiryToDB();
+                    setTimeout(() => navigateTo('approval_inquiry_confirmation'), 500);
+                    break;
+
                 default:
                     setTimeout(() => addMessage('bot', 'شكراً لك، لمتابعة الحوار استخدم الأزرار.'), 800);
             }
@@ -182,15 +196,7 @@
         async function handleClinicSelection() {
             const clinicDropdown = document.getElementById('clinic-select');
             const selectedClinic = clinicDropdown.value;
-            if (!selectedClinic) {
-                const tempMsg = document.createElement('div');
-                tempMsg.textContent = "يرجى اختيار عيادة.";
-                tempMsg.style.color = 'red';
-                tempMsg.style.textAlign = 'center';
-                clinicDropdown.parentElement.appendChild(tempMsg);
-                setTimeout(() => tempMsg.remove(), 2000);
-                return;
-            }
+            if (!selectedClinic) { return; }
             conversationState.clinic = selectedClinic;
             clinicDropdown.parentElement.innerHTML = `<p>تم اختيار: <strong>${selectedClinic}</strong></p>`;
 
@@ -214,20 +220,19 @@
             } catch (error) { console.error('Failed to save appointment:', error); }
         }
 
-        // --- ✨ New function to save insurance inquiries ✨ ---
-        async function saveInsuranceInquiryToDB() {
+        // --- ✨ New function to save approval inquiries ✨ ---
+        async function saveApprovalInquiryToDB() {
             try {
-                await fetch(`${API_URL}/save_insurance_inquiry`, {
+                await fetch(`${API_URL}/save_approval_inquiry`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         platformId: platformId,
-                        phone: conversationState.phone,
-                        id_number: conversationState.id_number,
-                        date: conversationState.date,
+                        id_or_phone: conversationState.id_or_phone,
+                        request_date: conversationState.request_date,
                     }),
                 });
-            } catch (error) { console.error('Failed to save insurance inquiry:', error); }
+            } catch (error) { console.error('Failed to save approval inquiry:', error); }
         }
 
         function addMessage(sender, text, buttons = []) {
