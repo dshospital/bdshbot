@@ -79,16 +79,14 @@
             try {
                 const response = await fetch(`${API_URL}/get_initial_data`);
                 if (!response.ok) { throw new Error(`HTTP error! status: ${response.status}`); }
-                
-                // ✨ FIX: Add a check to ensure the received data is a valid object ✨
                 const data = await response.json();
-                if (data && typeof data === 'object') {
+                if (data && typeof data === 'object' && !data.error) {
                     chatTree = data;
                     chatMessages.innerHTML = ''; 
                     navigateTo('welcome');
                 } else {
-                    // This handles cases where the server returns null or invalid data
-                    throw new Error('Invalid data structure received from server.');
+                    const errorMessage = data ? data.error : 'Unknown error';
+                    throw new Error(`Invalid data structure received from server: ${errorMessage}`);
                 }
             } catch (error) {
                 addMessage('bot', 'عفواً، حدث خطأ في الاتصال بالخادم.');
@@ -98,7 +96,6 @@
 
         function navigateTo(nodeId) {
             currentNodeId = nodeId;
-            // ✨ FIX: Add a check to ensure chatTree is not null before accessing it ✨
             const node = chatTree ? chatTree[nodeId] : null;
             if (!node) {
                  addMessage('bot', 'عذراً لم أفهم طلبك.');
@@ -166,11 +163,12 @@
                     break;
                 case 'insurance_ask_dob':
                     conversationState.date = userText;
-                    // In a real scenario, you would now send this data to a different endpoint.
+                    addMessage('bot', 'جاري إرسال طلبك...');
+                    await saveInsuranceInquiryToDB();
                     setTimeout(() => navigateTo('insurance_coverage_confirmation'), 500);
                     break;
 
-                // ✨ Approval Status Inquiry Flow (New) ✨
+                // Approval Status Inquiry Flow
                 case 'approval_inquiry_start':
                     conversationState.id_or_phone = userText;
                     setTimeout(() => navigateTo('approval_ask_date'), 500);
@@ -229,7 +227,21 @@
             } catch (error) { console.error('Failed to save appointment:', error); }
         }
 
-        // --- ✨ New function to save approval inquiries ✨ ---
+        async function saveInsuranceInquiryToDB() {
+            try {
+                await fetch(`${API_URL}/save_insurance_inquiry`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        platformId: platformId,
+                        phone: conversationState.phone,
+                        id_number: conversationState.id_number,
+                        date: conversationState.date,
+                    }),
+                });
+            } catch (error) { console.error('Failed to save insurance inquiry:', error); }
+        }
+
         async function saveApprovalInquiryToDB() {
             try {
                 await fetch(`${API_URL}/save_approval_inquiry`, {
