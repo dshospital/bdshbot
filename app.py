@@ -27,27 +27,26 @@ CORS(app)
 
 # --- Configuration is read from Environment Variables on Render ---
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+# We get all secret values from the Render environment
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL') 
+INSURANCE_RECIPIENT_EMAIL = os.environ.get('INSURANCE_RECIPIENT_EMAIL')
 GOOGLE_SCRIPT_URL = os.environ.get('GOOGLE_SCRIPT_URL')
-
-# --- ✨ Database Connection for Render - THIS IS THE FINAL FIX ✨ ---
-# This code now ONLY reads the cloud database URL from Render's environment variables.
 DATABASE_URL = os.environ.get('DATABASE_URL')
-if not DATABASE_URL:
-    raise ValueError("FATAL ERROR: DATABASE_URL environment variable is not set.")
 
-if DATABASE_URL.startswith("postgres://"):
+# --- Database Connection for Render ---
+# This code now ONLY reads the cloud database URL from Render's environment variables.
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     # Fix for SQLAlchemy compatibility on Render
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+# The app will fail to start if DATABASE_URL is not set, which is the correct behavior on a server.
 engine = create_engine(DATABASE_URL)
 
 # --- PART 3: HELPER FUNCTIONS ---
 
-def send_email_notification(name, phone, clinic):
-    """Sends an email using Gmail API, reading secrets from environment variables."""
+def send_email_notification(subject, recipient, html_body):
+    """Generic function to send an email using Gmail API."""
     creds = None
-    
     token_data_str = os.environ.get('GOOGLE_TOKEN_JSON')
     creds_data_str = os.environ.get('GOOGLE_CREDENTIALS_JSON')
 
@@ -65,34 +64,24 @@ def send_email_notification(name, phone, clinic):
             return
 
         service = build('gmail', 'v1', credentials=creds)
-        html_body = f"""
-        <html><body dir="rtl" style="font-family: Arial, sans-serif;">
-            <h2>طلب موعد جديد عبر الشات بوت</h2>
-            <p><strong>اسم المراجع:</strong> {name}</p>
-            <p><strong>رقم الجوال:</strong> {phone}</p>
-            <p><strong>العيادة المطلوبة:</strong> {clinic}</p>
-        </body></html>
-        """
         message = MIMEText(html_body, 'html')
-        message['To'] = RECIPIENT_EMAIL
-        message['Subject'] = f"طلب موعد جديد من: {name}"
+        message['To'] = recipient
+        message['Subject'] = subject
         
         encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
         create_message = {'raw': encoded_message}
         
         send_message = (service.users().messages().send(userId="me", body=create_message).execute())
-        print(F'Email sent successfully! Message Id: {send_message["id"]}')
+        print(F'Email sent successfully to {recipient}! Message Id: {send_message["id"]}')
     except Exception as e:
         print(f"An error occurred while sending email: {e}")
 
-
-def send_to_google_sheet(name, phone, clinic):
-    """Sends data to the Google Sheet."""
+def send_to_google_sheet(payload):
+    """Sends any data payload to the Google Sheet."""
     try:
         if GOOGLE_SCRIPT_URL:
-            payload = {"name": name, "phone": phone, "clinic": clinic}
             requests.post(GOOGLE_SCRIPT_URL, json=payload)
-            print(f"Data sent to Google Sheet successfully.")
+            print(f"Data sent to Google Sheet successfully: {payload.get('type')}")
     except Exception as e:
         print(f"Failed to send data to Google Sheet: {e}")
 
@@ -128,7 +117,6 @@ def get_user_id(conn, platform_id):
     if result:
         return result[0]
     else:
-        # Use RETURNING for PostgreSQL, which is what Render uses
         insert_query = text("INSERT INTO users (platform_user_id) VALUES (:pid) RETURNING user_id")
         result = conn.execute(insert_query, {"pid": platform_id}).fetchone()
         conn.commit()
@@ -138,20 +126,16 @@ def get_user_id(conn, platform_id):
 
 @app.route('/')
 def index():
-    """Serves the main HTML page."""
     return render_template('index.html')
 
 @app.route('/get_initial_data', methods=['GET'])
 def get_initial_data():
-    """Fetches the conversation tree from the database."""
     try:
         with engine.connect() as conn:
             result = conn.execute(text("SELECT intent_name, bot_response, question_examples FROM knowledge_base"))
             records = [dict(row) for row in result.mappings()]
             if not records:
-                print("Knowledge base is empty. Check your database.")
                 return jsonify({"error": "Knowledge base is empty."}), 404
-            
             chat_tree = format_chat_tree(records)
             return jsonify(chat_tree)
     except Exception as e:
@@ -160,14 +144,19 @@ def get_initial_data():
 
 @app.route('/save_appointment', methods=['POST'])
 def save_appointment():
-    """Saves an appointment and triggers notifications."""
     data = request.get_json()
     name = data.get('name')
     phone = data.get('phone')
     clinic = data.get('clinic')
     
-    send_email_notification(name, phone, clinic)
-    send_to_google_sheet(name, phone, clinic)
+    # Send email notification
+    subject = f"طلب موعد جديد من: {name}"
+    html_body = f"<html><body><h2>طلب موعد جديد</h2><p><strong>الاسم:</strong> {name}</p><p><strong>الجوال:</strong> {phone}</p><p><strong>العيادة:</strong> {clinic}</p></body></html>"
+    send_email_notification(subject, RECIPIENT_EMAIL, html_body)
+
+    # Send to Google Sheet
+    payload = {"type": "appointment", "name": name, "phone": phone, "clinic": clinic}
+    send_to_google_sheet(payload)
     
     try:
         with engine.connect() as conn:
@@ -180,7 +169,34 @@ def save_appointment():
         print(f"Error saving appointment: {e}")
         return jsonify({"error": "Could not save appointment"}), 500
 
+# --- ✨ New Endpoint for Insurance Inquiries ✨ ---
+@app.route('/save_insurance_inquiry', methods=['POST'])
+def save_insurance_inquiry():
+    data = request.get_json()
+    phone = data.get('phone')
+    id_number = data.get('id_number')
+    dob = data.get('date') # Date of Birth
+
+    # Send email notification to insurance department
+    subject = "استعلام جديد عن تغطية تأمين"
+    html_body = f"<html><body><h2>استعلام تأمين جديد</h2><p><strong>الجوال:</strong> {phone}</p><p><strong>رقم الهوية:</strong> {id_number}</p><p><strong>تاريخ الميلاد:</strong> {dob}</p></body></html>"
+    send_email_notification(subject, INSURANCE_RECIPIENT_EMAIL, html_body)
+
+    # Send to Google Sheet
+    payload = {"type": "insurance_inquiry", "phone": phone, "id_number": id_number, "date": dob}
+    send_to_google_sheet(payload)
+
+    try:
+        with engine.connect() as conn:
+            user_id = get_user_id(conn, data.get('platformId'))
+            query = text("INSERT INTO medical_approvals (user_id, phone_number, identity_number, request_date) VALUES (:uid, :phone, :id, :date)")
+            conn.execute(query, {"uid": user_id, "phone": phone, "id": id_number, "date": dob})
+            conn.commit()
+            return jsonify({"status": "success"})
+    except Exception as e:
+        print(f"Error saving insurance inquiry: {e}")
+        return jsonify({"error": "Could not save insurance inquiry"}), 500
+
 # --- PART 5: RUN THE APP ---
 if __name__ == '__main__':
-    # This part is for local testing. Render uses the Procfile.
     app.run(debug=False, host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
