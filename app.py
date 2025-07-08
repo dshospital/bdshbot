@@ -27,6 +27,7 @@ CORS(app)
 
 # --- Configuration is read from Environment Variables on Render ---
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+# We get all secret values from the Render environment
 RECIPIENT_EMAIL = os.environ.get('RECIPIENT_EMAIL') 
 INSURANCE_RECIPIENT_EMAIL = os.environ.get('INSURANCE_RECIPIENT_EMAIL')
 APPROVAL_RECIPIENT_EMAIL = os.environ.get('APPROVAL_RECIPIENT_EMAIL')
@@ -118,6 +119,7 @@ def get_user_id(conn, platform_id):
     if result:
         return result[0]
     else:
+        # Use RETURNING for PostgreSQL, which is what Render uses
         insert_query = text("INSERT INTO users (platform_user_id) VALUES (:pid) RETURNING user_id")
         result = conn.execute(insert_query, {"pid": platform_id}).fetchone()
         conn.commit()
