@@ -6,7 +6,7 @@
     <title>مستشفى دار الشفاء - شات بوت</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap');
-        :root{--header-bg:#183D6F;--chat-bg:#F7F7F7;--bot-bubble-bg:#E0F5F4;--user-bubble-bg:#dcf8c6;--button-bg:#00A99D;--text-dark:#333;--text-light:#fff}
+        :root{--header-bg:#273159;--chat-bg:#F7F7F7;--bot-bubble-bg:#E0F5F4;--user-bubble-bg:#dcf8c6;--button-bg:#00A99D;--text-dark:#333;--text-light:#fff}
         body{font-family:'Tajawal',sans-serif;background-color:#e5e5e5;margin:0;padding:20px;height:150vh;}
         .chat-fab{position:fixed;bottom:30px;left:30px;width:65px;height:65px;background-color:var(--header-bg);border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,.3);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:9998;transition:transform .3s ease;animation:pulse 2.5s infinite}
         .chat-fab:hover{transform:scale(1.1);animation-play-state:paused}
@@ -15,12 +15,17 @@
         .chat-widget-container{position:fixed;bottom:110px;left:30px;z-index:9999;opacity:0;transform:translateY(30px) scale(.9);transform-origin:bottom left;visibility:hidden;transition:all .4s cubic-bezier(.25,1,.5,1)}
         .chat-widget-container.open{opacity:1;transform:translateY(0) scale(1);visibility:visible}
         .chatbot-container{width:380px;height:600px;background-color:var(--chat-bg);border-radius:20px;box-shadow:0 10px 40px rgba(0,0,0,.2);display:flex;flex-direction:column;overflow:hidden}
-        .chat-header{background-color:var(--header-bg);color:var(--text-light);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:relative}
-        .header-info{display:flex;align-items:center;gap:12px}
-        .header-info .avatar{width:40px;height:40px;border-radius:50%;background-image:url(https://daralshefa.com.sa/wp-content/uploads/2022/10/logo.png);background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#fff;border:2px solid var(--button-bg)}
-        .header-title h3{margin:0;font-size:16px;font-weight:700}
-        .header-title span{font-size:12px;opacity:.9}
-        .close-btn{background:0 0;border:none;color:white;font-size:30px;cursor:pointer;position:absolute;left:15px;top:50%;transform:translateY(-50%)}
+        
+        /* --- ✨ Header UX/UI Improvements ✨ --- */
+        .chat-header{background-color:var(--header-bg);color:var(--text-light);padding:15px 20px;display:flex;align-items:center;justify-content:space-between;}
+        .header-info{display:flex;align-items:center;gap:12px;}
+        .header-info .avatar{width:45px;height:45px;border-radius:50%;background-image:url(https://daralshefa.com.sa/wp-content/uploads/2023/11/Fav-1-150x150.png);background-size:contain;background-repeat:no-repeat;background-position:center;background-color:#fff;border:2px solid var(--button-bg)}
+        .header-title{text-align: right;}
+        .header-title h3{margin:0;font-size:16px;font-weight:700}.header-title span{font-size:12px;opacity:.9}
+        .end-chat-btn{background-color:transparent;border:1px solid rgba(255, 255, 255, 0.5);color:white;font-size:13px;cursor:pointer;padding: 6px 14px; border-radius: 20px; font-family:'Tajawal',sans-serif; transition: background-color 0.3s, color 0.3s;}
+        .end-chat-btn:hover {background-color: rgba(255, 255, 255, 0.1);}
+        /* ------------------------------------ */
+
         .chat-messages{flex-grow:1;padding:10px 20px;overflow-y:auto}
         .message{margin-bottom:20px;display:flex;flex-direction:column}
         .message-bubble{padding:12px 18px;border-radius:25px;max-width:85%;word-wrap:break-word;line-height:1.6;color:var(--text-dark)}
@@ -30,7 +35,7 @@
         .bot-message .timestamp{align-self:flex-start;margin-right:10px}
         .user-message .timestamp{align-self:flex-end;margin-left:10px}
         .action-buttons{display:flex;flex-wrap:wrap;gap:10px;margin-top:15px;justify-content:flex-start}
-        .action-buttons button, .dropdown-submit {background-color:var(--button-bg);border:none;color:var(--text-light);padding:8px 20px;border-radius:30px;cursor:pointer;font-family:'Tajawal',sans-serif;font-weight:500;font-size:14px;transition:transform .2s}
+        .action-buttons button, .dropdown-submit {background-color:var(--button-bg);border:none;color:var(--text-light);padding:8px 20px;border-radius:30px;cursor:pointer;font-family:'Tajawal',sans-serif;font-weight:500;font-size:14px;transition:transform .2s; display: inline-flex; align-items: center; gap: 8px;}
         .action-buttons button:hover, .dropdown-submit:hover {transform:scale(1.05)}
         .chat-input-area{display:flex;padding:15px 20px;background-color:#fff;border-top:1px solid #e0e0e0}
         .chat-input-area input{flex-grow:1;border:none;background-color:transparent;padding:10px;font-size:15px;font-family:'Tajawal',sans-serif}
@@ -45,17 +50,25 @@
 <body>
     <div class="chat-widget-container" id="chat-widget">
         <div class="chatbot-container">
-            <div class="chat-header"><div class="close-btn" id="close-chatbot-btn">&times;</div><div class="header-info"><div class="header-title"><h3>مستشفى دار الشفاء</h3><span>متصل الآن</span></div><div class="avatar"></div></div></div>
+            <!-- ✨ UI Change: Updated Header Structure ✨ -->
+            <div class="chat-header">
+                <button class="end-chat-btn" id="end-chat-btn">إنهاء المحادثة</button>
+                <div class="header-info">
+                    <div class="header-title"><h3>مستشفى دار الشفاء</h3><span>متصل الآن</span></div>
+                    <div class="avatar"></div>
+                </div>
+            </div>
             <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input-area"><button id="send-btn">➤</button><input type="text" id="user-input" placeholder="اسأل..."></div>
         </div>
     </div>
-    <div class="chat-fab" id="chat-fab"><img src="https://daralshefa.com.sa/wp-content/uploads/2022/10/logo.png" alt="Chat Icon"></div>
+    <div class="chat-fab" id="chat-fab"><img src="https://sp.labibabot.com//Images/WebImages/b97cc884-e8ea-4f3c-a004-000c78d20bd1.jpg" alt="Chat Icon"></div>
 
     <script>
         const chatWidget = document.getElementById('chat-widget');
         const fab = document.getElementById('chat-fab');
-        const closeBtn = document.getElementById('close-chatbot-btn');
+        // ✨ JS Change: Updated button ID ✨
+        const closeBtn = document.getElementById('end-chat-btn'); 
         const chatMessages = document.getElementById('chat-messages');
         const userInput = document.getElementById('user-input');
         const sendBtn = document.getElementById('send-btn');
@@ -67,6 +80,7 @@
         let platformId = getPlatformId();
         let conversationState = {};
         let currentNodeId = null;
+        const clinics = ['عيادات الباطنية و الغدد الصماء', 'عيادات الباطنية ومناظير الجهاز الهضمي', 'قسم الجراحة العامة', 'عيادة الانف والأذن والحنجرة', 'قسم العظام', 'قسم الأطفال', 'عيادة المخ و الأعصاب', 'قسم المسالك البولية', 'قسم النساء والولادة', 'قسم المختبر', 'قسم الطوارئ', 'قسم القلب والقسطرة القلبية', 'عيادة التخدير', 'عيادات الكلى', 'الصيدلية الداخلية', 'قسم الاسنان', 'عيادات الجلدية والتجميل', 'عيادة الأمراض الصدرية', 'عيادة الطب العام', 'مركز العلاج الطبيعي'];
 
         fab.addEventListener('click', loadChat, { once: true });
         closeBtn.addEventListener('click', () => chatWidget.classList.remove('open'));
@@ -98,7 +112,8 @@
             currentNodeId = nodeId;
             const node = chatTree ? chatTree[nodeId] : null;
             if (!node) {
-                 addMessage('bot', 'عذراً لم أفهم طلبك.');
+                 addMessage('bot', 'عذراً لم أفهم طلبك. لمساعدتك بشكل أفضل، يمكنك استخدام أحد الأزرار أو تجربة المساعد الطبي الذكي لوصف أعراضك.');
+                 setTimeout(() => navigateTo('main_menu_ar'), 2000);
                  return;
             }
             const buttons = node.ButtonsJSON || [];
@@ -131,6 +146,11 @@
                 return;
             }
             
+            if (goToID === 'symptom_checker_analyze') {
+                getSymptomAnalysis(conversationState.symptoms.join(', '));
+                return;
+            }
+
             setTimeout(() => navigateTo(goToID), 500);
         }
 
@@ -140,9 +160,7 @@
             addMessage('user', userText);
             userInput.value = '';
 
-            // --- ✨ منطق محدث للتعامل مع كل التدفقات ✨ ---
             switch (currentNodeId) {
-                // Booking Flow
                 case 'booking_start':
                     conversationState.name = userText;
                     setTimeout(() => navigateTo('booking_ask_phone'), 500);
@@ -152,7 +170,15 @@
                     setTimeout(() => navigateTo('booking_ask_clinic'), 500);
                     break;
                 
-                // Insurance Coverage Flow
+                case 'symptom_checker_start':
+                    conversationState.symptoms = [userText];
+                    setTimeout(() => navigateTo('symptom_checker_ask_more'), 500);
+                    break;
+                case 'symptom_checker_get_more':
+                    conversationState.symptoms.push(userText);
+                    setTimeout(() => navigateTo('symptom_checker_ask_more'), 500);
+                    break;
+
                 case 'insurance_coverage_start':
                     conversationState.phone = userText;
                     setTimeout(() => navigateTo('insurance_ask_id'), 500);
@@ -163,12 +189,9 @@
                     break;
                 case 'insurance_ask_dob':
                     conversationState.date = userText;
-                    addMessage('bot', 'جاري إرسال طلبك...');
-                    await saveInsuranceInquiryToDB();
                     setTimeout(() => navigateTo('insurance_coverage_confirmation'), 500);
                     break;
 
-                // Approval Status Inquiry Flow
                 case 'approval_inquiry_start':
                     conversationState.id_or_phone = userText;
                     setTimeout(() => navigateTo('approval_ask_date'), 500);
@@ -181,12 +204,81 @@
                     break;
 
                 default:
-                    setTimeout(() => addMessage('bot', 'شكراً لك، لمتابعة الحوار استخدم الأزرار.'), 800);
+                    getGeneralAnswer(userText);
             }
         }
         
+        async function getSymptomAnalysis(symptoms) {
+            addMessage('bot', 'لحظات... جاري تحليل الأعراض بواسطة المساعد الذكي ✨');
+            userInput.disabled = true;
+
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            
+            const prompt = `You are a helpful medical triage assistant for a hospital in Saudi Arabia. A user has described their symptoms. Based on these symptoms, suggest ONLY ONE most appropriate medical clinic for them to visit from the provided list. Respond in Arabic. Your entire response should be ONLY the name of the clinic and nothing else.
+            Available clinics: [${clinics.join(", ")}].
+            User symptoms: "${symptoms}"`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                
+                const result = await response.json();
+                const suggestedClinic = result.candidates[0].content.parts[0].text.trim();
+                
+                const responseText = `بناءً على الأعراض التي وصفتها، نوصي بزيارة: <b>${suggestedClinic}</b>. هل تود حجز موعد الآن في هذه العيادة؟`;
+                const buttons = [
+                    { "text": "نعم، احجز موعد", "goToID": "booking_start" },
+                    { "text": "لا، العودة للقائمة الرئيسية", "goToID": "main_menu_ar" }
+                ];
+                addMessage('bot', responseText, buttons);
+
+            } catch (error) {
+                console.error("Gemini API error:", error);
+                addMessage('bot', 'عفواً، لم أتمكن من تحليل الأعراض حالياً. يرجى المحاولة مرة أخرى أو اختيار خدمة من القائمة.');
+                setTimeout(() => navigateTo('main_menu_ar'), 2000);
+            } finally {
+                userInput.disabled = false;
+            }
+        }
+
+        async function getGeneralAnswer(question) {
+            addMessage('bot', 'لحظات... أفكر في إجابة لسؤالك ✨');
+            userInput.disabled = true;
+
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            
+            const prompt = `You are a helpful assistant for Dar Al Shifa Hospital in Riyadh. Answer the user's question based on general knowledge about hospitals. Keep the answer brief, helpful, and in Arabic.
+            User question: "${question}"`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                
+                const result = await response.json();
+                const answer = result.candidates[0].content.parts[0].text.trim();
+                
+                addMessage('bot', answer, [{ "text": "العودة للقائمة الرئيسية", "goToID": "main_menu_ar" }]);
+
+            } catch (error) {
+                console.error("Gemini API error:", error);
+                addMessage('bot', 'عفواً، ليس لدي إجابة على هذا السؤال حالياً. يمكنك اختيار خدمة من القائمة.');
+                setTimeout(() => navigateTo('main_menu_ar'), 2000);
+            } finally {
+                userInput.disabled = false;
+            }
+        }
+
         function addClinicsDropdown() {
-            const clinics = ['عيادات الباطنية و الغدد الصماء', 'عيادات الباطنية ومناظير الجهاز الهضمي', 'قسم الجراحة العامة', 'عيادة الانف والأذن والحنجرة', 'قسم العظام', 'قسم الأطفال', 'عيادة المخ و الأعصاب', 'قسم المسالك البولية', 'قسم النساء والولادة', 'قسم المختبر', 'قسم الطوارئ', 'قسم القلب والقسطرة القلبية', 'عيادة التخدير', 'عيادات الكلى', 'الصيدلية الداخلية', 'قسم الاسنان', 'عيادات الجلدية والتجميل', 'عيادة الأمراض الصدرية', 'عيادة الطب العام', 'مركز العلاج الطبيعي'];
             let optionsHTML = clinics.map(clinic => `<option value="${clinic}">${clinic}</option>`).join('');
             const dropdownHTML = `
                 <div class="message-bubble">
@@ -225,21 +317,6 @@
                     }),
                 });
             } catch (error) { console.error('Failed to save appointment:', error); }
-        }
-
-        async function saveInsuranceInquiryToDB() {
-            try {
-                await fetch(`${API_URL}/save_insurance_inquiry`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        platformId: platformId,
-                        phone: conversationState.phone,
-                        id_number: conversationState.id_number,
-                        date: conversationState.date,
-                    }),
-                });
-            } catch (error) { console.error('Failed to save insurance inquiry:', error); }
         }
 
         async function saveApprovalInquiryToDB() {
